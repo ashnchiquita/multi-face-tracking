@@ -8,6 +8,7 @@ import yaml
 
 from face_alignment.alignment import norm_crop
 from face_detection.scrfd.detector import SCRFD
+from face_detection.yolov5_face.detector import Yolov5Face
 from face_tracking.tracker.byte_tracker import BYTETracker
 from face_tracking.tracker.visualize import plot_tracking
 
