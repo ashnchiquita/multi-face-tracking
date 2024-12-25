@@ -5,13 +5,9 @@ import cv2
 import numpy as np
 import torch
 import yaml
-from torchvision import transforms
 
 from face_alignment.alignment import norm_crop
 from face_detection.scrfd.detector import SCRFD
-from face_detection.yolov5_face.detector import Yolov5Face
-from face_recognition.arcface.model import iresnet_inference
-from face_recognition.arcface.utils import compare_encodings, read_features
 from face_tracking.tracker.byte_tracker import BYTETracker
 from face_tracking.tracker.visualize import plot_tracking
 
@@ -24,14 +20,6 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # Face detector (choose one)
 detector = SCRFD(model_file="face_detection/scrfd/weights/scrfd_2.5g_bnkps.onnx")
 # detector = Yolov5Face(model_file="face_detection/yolov5_face/weights/yolov5n-face.pt")
-
-# Face recognizer
-recognizer = iresnet_inference(
-    model_name="r100", path="face_recognition/arcface/weights/arcface_r100.pth", device=device
-)
-
-# Load precomputed face features and names
-images_names, images_embs = read_features(feature_path="./datasets/face_features/feature")
 
 # Mapping of face IDs to names
 id_face_mapping = {}
@@ -121,61 +109,6 @@ def process_tracking(frame, detector, tracker, args, frame_id, fps):
     data_mapping["tracking_bboxes"] = tracking_bboxes
 
     return tracking_image
-
-
-@torch.no_grad()
-def get_feature(face_image):
-    """
-    Extract features from a face image.
-
-    Args:
-        face_image: The input face image.
-
-    Returns:
-        numpy.ndarray: The extracted features.
-    """
-    face_preprocess = transforms.Compose(
-        [
-            transforms.ToTensor(),
-            transforms.Resize((112, 112)),
-            transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
-        ]
-    )
-
-    # Convert to RGB
-    face_image = cv2.cvtColor(face_image, cv2.COLOR_BGR2RGB)
-
-    # Preprocess image (BGR)
-    face_image = face_preprocess(face_image).unsqueeze(0).to(device)
-
-    # Inference to get feature
-    emb_img_face = recognizer(face_image).cpu().numpy()
-
-    # Convert to array
-    images_emb = emb_img_face / np.linalg.norm(emb_img_face)
-
-    return images_emb
-
-
-def recognition(face_image):
-    """
-    Recognize a face image.
-
-    Args:
-        face_image: The input face image.
-
-    Returns:
-        tuple: A tuple containing the recognition score and name.
-    """
-    # Get feature from face
-    query_emb = get_feature(face_image)
-
-    score, id_min = compare_encodings(query_emb, images_embs)
-    name = images_names[id_min]
-    score = score[0]
-
-    return score, name
-
 
 def mapping_bbox(box1, box2):
     """
@@ -268,13 +201,10 @@ def recognize():
                 mapping_score = mapping_bbox(box1=tracking_bboxes[i], box2=detection_bboxes[j])
                 if mapping_score > 0.9:
                     face_alignment = norm_crop(img=raw_image, landmark=detection_landmarks[j])
-
-                    score, name = recognition(face_image=face_alignment)
-                    if name is not None:
-                        if score < 0.25:
-                            caption = "UN_KNOWN"
-                        else:
-                            caption = f"{name}:{score:.2f}"
+                    
+                    # TODO: pass to rPPG pipeline
+                    
+                    caption = ""
 
                     id_face_mapping[tracking_ids[i]] = caption
 
