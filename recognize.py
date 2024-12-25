@@ -15,6 +15,9 @@ from face_recognition.arcface.utils import compare_encodings, read_features
 from face_tracking.tracker.byte_tracker import BYTETracker
 from face_tracking.tracker.visualize import plot_tracking
 
+# Handle exit interrupt in worker threads
+stop_event = threading.Event()
+
 # Device configuration
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -244,12 +247,16 @@ def tracking(detector, args):
         # Check for user exit input
         ch = cv2.waitKey(1)
         if ch == 27 or ch == ord("q") or ch == ord("Q"):
+            stop_event.set()  # Signal other threads to stop
             break
+        
+    cap.release()
+    cv2.destroyAllWindows()
 
 
 def recognize():
     """Face recognition in a separate thread."""
-    while True:
+    while not stop_event.is_set():
         raw_image = data_mapping["raw_image"]
         detection_landmarks = data_mapping["detection_landmarks"]
         detection_bboxes = data_mapping["detection_bboxes"]
@@ -279,7 +286,6 @@ def recognize():
         if tracking_bboxes == []:
             print("Waiting for a person...")
 
-
 def main():
     """Main function to start face tracking and recognition threads."""
     file_name = "./face_tracking/config/config_tracking.yaml"
@@ -298,6 +304,10 @@ def main():
     # Start recognition thread
     thread_recognize = threading.Thread(target=recognize)
     thread_recognize.start()
+    
+    # Keep the main thread alive to catch signals
+    thread_track.join()
+    thread_recognize.join()
 
 
 if __name__ == "__main__":
